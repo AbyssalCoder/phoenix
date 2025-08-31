@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phoenix AI Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chosen Palette: Futuristic Dark Blue -->
+    <!-- Application Structure Plan: The application is now a complex, single-page dashboard built on a CSS Grid layout. This structure was chosen to replicate the dense, multi-panel aesthetic of the reference image. The UI is divided into distinct, themed "widgets" (e.g., system stats, date/time, chat log) that provide a comprehensive overview. This design prioritizes information density and a futuristic aesthetic over a simple conversational flow, allowing the user to feel like they are interacting with a full-fledged system. The core interaction remains voice control, which triggers updates in the appropriate widget panels. -->
+    <!-- Visualization & Content Choices:
+        - Report Info: The concept of a "Phoenix" AI assistant. Goal: Replicate the intricate holographic dashboard from the provided image. Viz/Presentation Method: Two separate HTML Canvas elements are used: one for a dynamic, multi-layered orb in the center and a full-screen background canvas for falling alphanumeric characters. Static data like time, date, and system stats are rendered in structured HTML panels. Interaction: Voice commands (Web Speech API) are the primary input. The core functionality of a web-grounded LLM response for any query is maintained and integrated into the central chat log panel. Justification: This multi-canvas approach allows for complex, independent animations without affecting the UI layout, while the static panels provide clear, contextual information, successfully capturing the desired aesthetic. Library/Method: Vanilla JavaScript for logic, Web Speech API for voice I/O, HTML Canvas API for dynamic visualization, and the Gemini API for web-grounded text generation. NO SVG graphics used. NO Mermaid JS used.
+    -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Roboto+Mono:wght@400;700&display=swap');
+        
+        body {
+            font-family: 'Roboto Mono', monospace;
+            background-color: #0d1a26;
+            color: #e0f2f1;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+        
+        #background-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: -10;
+        }
+
+        .dashboard-container {
+            display: grid;
+            grid-template-areas:
+                "top-left top-center top-right"
+                "mid-left mid-center mid-right"
+                "bottom-left bottom-center bottom-right";
+            grid-template-columns: 1fr 2fr 1fr;
+            grid-template-rows: auto auto auto;
+            width: 100vw;
+            height: 100vh;
+            gap: 1.5rem;
+            padding: 1.5rem;
+            max-width: 100vw;
+            max-height: 100vh;
+            box-sizing: border-box;
+        }
+        
+        .dashboard-panel {
+            background-color: rgba(13, 26, 38, 0.5);
+            border: 1px solid rgba(0, 170, 255, 0.3);
+            border-radius: 0.5rem;
+            box-shadow: 0 0 10px rgba(0, 170, 255, 0.5), inset 0 0 5px rgba(0, 170, 255, 0.3);
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            animation: pulse-border 5s infinite;
+        }
+        
+        @keyframes pulse-border {
+            0% { box-shadow: 0 0 10px rgba(0, 170, 255, 0.5), inset 0 0 5px rgba(0, 170, 255, 0.3); }
+            50% { box-shadow: 0 0 20px rgba(0, 170, 255, 0.8), inset 0 0 10px rgba(0, 170, 255, 0.5); }
+            100% { box-shadow: 0 0 10px rgba(0, 170, 255, 0.5), inset 0 0 5px rgba(0, 170, 255, 0.3); }
+        }
+
+        #top-left { grid-area: top-left; }
+        #top-center { grid-area: top-center; }
+        #top-right { grid-area: top-right; }
+        #mid-left { grid-area: mid-left; }
+        #mid-center { grid-area: mid-center; }
+        #mid-right { grid-area: mid-right; }
+        #bottom-left { grid-area: bottom-left; }
+        #bottom-center { grid-area: bottom-center; }
+        #bottom-right { grid-area: bottom-right; }
+
+        .widget-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #00aaff;
+            text-shadow: 0 0 5px #00aaff;
+            margin-bottom: 1rem;
+        }
+
+        #phoenixOrb-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #phoenixOrb {
+            width: 90%;
+            height: 90%;
+            max-width: 400px;
+            max-height: 400px;
+        }
+        
+        .chat-log {
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: #00aaff #1a2c3a;
+        }
+        
+        .chat-log::-webkit-scrollbar {
+            width: 8px;
+        }
+        .chat-log::-webkit-scrollbar-track {
+            background: #1a2c3a;
+        }
+        .chat-log::-webkit-scrollbar-thumb {
+            background-color: #00aaff;
+            border-radius: 20px;
+            border: 3px solid #1a2c3a;
+        }
+        
+        .user-msg {
+            background-color: #1a3a5a;
+            align-self: flex-end;
+            border-bottom-right-radius: 0;
+            opacity: 0;
+            transform: translateX(20px);
+            animation: fadeInRight 0.5s ease forwards;
+        }
+        .phoenix-msg {
+            background-color: #0d263a;
+            align-self: flex-start;
+            border-bottom-left-radius: 0;
+            opacity: 0;
+            transform: translateX(-20px);
+            animation: fadeInLeft 0.5s ease forwards;
+        }
+        @keyframes fadeInRight {
+            to { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes fadeInLeft {
+            to { opacity: 1; transform: translateX(0); }
+        }
+        
+        .glow-button {
+            box-shadow: 0 0 5px #00aaff, 0 0 15px #00aaff, 0 0 25px #00aaff;
+            transition: all 0.3s ease;
+        }
+        .glow-button:hover {
+            box-shadow: 0 0 10px #00aaff, 0 0 25px #00aaff, 0 0 50px #00aaff;
+        }
+        
+        @media (max-width: 768px) {
+            .dashboard-container {
+                grid-template-areas:
+                    "top-left"
+                    "top-center"
+                    "top-right"
+                    "mid-left"
+                    "mid-center"
+                    "mid-right"
+                    "bottom-left"
+                    "bottom-center"
+                    "bottom-right";
+                grid-template-columns: 1fr;
+                grid-template-rows: auto;
+                padding: 1rem;
+                gap: 1rem;
+            }
+        }
+
+    </style>
+</head>
+<body>
+
+    <canvas id="background-canvas"></canvas>
+
+    <div class="dashboard-container">
+        <!-- Top Left Panel -->
+        <div id="top-left" class="dashboard-panel">
+            <h2 class="widget-title">STATUS</h2>
+            <div class="flex-grow flex flex-col justify-center items-center space-y-4">
+                <div class="text-3xl font-bold text-center text-cyan-400" id="current-date"></div>
+                <div class="text-5xl font-bold text-center text-cyan-300" id="current-time"></div>
+                <p id="status" class="text-lg text-cyan-400 mt-2 text-center">System offline. Press the button to activate.</p>
+            </div>
+        </div>
+
+        <!-- Top Center Panel -->
+        <div id="top-center" class="dashboard-panel flex flex-col justify-center items-center">
+             <h2 class="widget-title">SYSTEM</h2>
+            <div class="flex items-center space-x-4">
+                <div class="text-center">
+                    <p class="text-xl text-cyan-300">RAM</p>
+                    <p id="ram-usage" class="text-2xl font-bold text-cyan-400">49%</p>
+                </div>
+                <div class="text-center">
+                    <p class="text-xl text-cyan-300">CPU</p>
+                    <p id="cpu-usage" class="text-2xl font-bold text-cyan-400">51%</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Top Right Panel -->
+        <div id="top-right" class="dashboard-panel">
+            <h2 class="widget-title">WEATHER</h2>
+            <div class="flex flex-col flex-grow justify-center items-center text-center">
+                <p class="text-3xl font-bold text-cyan-400">21°C</p>
+                <p class="text-lg text-cyan-300 mt-2">Mostly Clear</p>
+            </div>
+        </div>
+
+        <!-- Mid Left Panel -->
+        <div id="mid-left" class="dashboard-panel">
+             <h2 class="widget-title">ENERGY</h2>
+             <div class="flex-grow flex items-center justify-center">
+                <div class="w-24 h-24 rounded-full border-4 border-cyan-400 flex items-center justify-center text-center">
+                    <p class="text-xl font-bold">100%</p>
+                </div>
+             </div>
+        </div>
+
+        <!-- Mid Center Panel -->
+        <div id="mid-center" class="dashboard-panel flex flex-col items-center">
+            <div id="phoenixOrb-container">
+                <canvas id="phoenixOrb"></canvas>
+            </div>
+             <button id="activate-button" class="glow-button bg-cyan-500 text-white font-bold py-3 px-8 rounded-full text-lg shadow-lg hover:bg-cyan-400 transition-all duration-300 ease-in-out transform hover:scale-105 mt-4">
+                ACTIVATE
+            </button>
+        </div>
+
+        <!-- Mid Right Panel -->
+        <div id="mid-right" class="dashboard-panel flex flex-col">
+            <h2 class="widget-title">COMMUNICATION</h2>
+            <div id="chat-log" class="chat-log flex-grow space-y-4 pr-2">
+                <div class="phoenix-msg p-3 rounded-lg max-w-md">
+                    <p class="font-bold text-cyan-300">PHOENIX</p>
+                    <p>Hmph. It's not like I want to help you or anything. Just ask your question, I guess.</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Bottom Left Panel -->
+        <div id="bottom-left" class="dashboard-panel">
+            <h2 class="widget-title">NETWORK</h2>
+            <div class="flex-grow flex items-center justify-center text-center">
+                <p class="text-2xl text-cyan-300" id="net-speed">Fetching speed...</p>
+            </div>
+        </div>
+
+        <!-- Bottom Center Panel -->
+        <div id="bottom-center" class="dashboard-panel">
+            <h2 class="widget-title">CONTROLS</h2>
+            <div class="flex-grow flex items-center justify-center space-x-4">
+                <button id="start-btn" class="px-4 py-2 rounded-lg bg-gray-800 text-cyan-300 border border-cyan-500 hover:bg-cyan-900 transition-colors">START</button>
+                <button id="stop-btn" class="px-4 py-2 rounded-lg bg-gray-800 text-cyan-300 border border-cyan-500 hover:bg-cyan-900 transition-colors">STOP</button>
+                <button id="reboot-btn" class="px-4 py-2 rounded-lg bg-gray-800 text-cyan-300 border border-cyan-500 hover:bg-cyan-900 transition-colors">REBOOT</button>
+            </div>
+        </div>
+        
+        <!-- Bottom Right Panel -->
+        <div id="bottom-right" class="dashboard-panel">
+            <h2 class="widget-title">AUDIO</h2>
+            <div class="flex-grow flex items-center justify-center space-x-2">
+                <button id="rec-btn" class="w-12 h-12 bg-gray-800 rounded-full border border-cyan-500 flex items-center justify-center hover:bg-cyan-900 transition-colors">
+                    <div id="rec-dot" class="w-2 h-2 rounded-full bg-red-500"></div>
+                </button>
+                <p class="text-sm">REC</p>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const activateButton = document.getElementById('activate-button');
+            const statusDisplay = document.getElementById('status');
+            const chatLog = document.getElementById('chat-log');
+            const phoenixOrbCanvas = document.getElementById('phoenixOrb');
+            const phoenixOrbCtx = phoenixOrbCanvas.getContext('2d');
+            const bgCanvas = document.getElementById('background-canvas');
+            const bgCtx = bgCanvas.getContext('2d');
+            const startBtn = document.getElementById('start-btn');
+            const stopBtn = document.getElementById('stop-btn');
+            const rebootBtn = document.getElementById('reboot-btn');
+            const recBtn = document.getElementById('rec-btn');
+            const recDot = document.getElementById('rec-dot');
+            const netSpeedDisplay = document.getElementById('net-speed');
+
+            let recognition;
+            let isListening = false;
+            let aiState = 'idle';
+            let errorOccurred = false;
+            let mediaRecorder;
+            let audioChunks = [];
+            let isRecording = false;
+
+            const updateDateTime = () => {
+                const now = new Date();
+                const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+                const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false };
+                document.getElementById('current-date').textContent = now.toLocaleDateString('en-US', dateOptions);
+                document.getElementById('current-time').textContent = now.toLocaleTimeString('en-US', timeOptions);
+                document.getElementById('cpu-usage').textContent = `${Math.floor(Math.random() * 20) + 40}%`;
+                document.getElementById('ram-usage').textContent = `${Math.floor(Math.random() * 20) + 40}%`;
+
+                // Update network speed
+                if (navigator.connection && navigator.connection.downlink) {
+                    netSpeedDisplay.textContent = `${navigator.connection.downlink.toFixed(1)} Mbps`;
+                } else {
+                    netSpeedDisplay.textContent = 'N/A';
+                }
+            };
+            setInterval(updateDateTime, 1000);
+            updateDateTime();
+
+            // Orb Animation
+            const orbSize = Math.min(phoenixOrbCanvas.parentElement.clientWidth, phoenixOrbCanvas.parentElement.clientHeight) * 0.9;
+            phoenixOrbCanvas.width = orbSize;
+            phoenixOrbCanvas.height = orbSize;
+            const orbCenter = { x: orbSize / 2, y: orbSize / 2 };
+
+            let particles = [];
+            let rings = [];
+
+            function initOrbParticles() {
+                particles = [];
+                for (let i = 0; i < 150; i++) {
+                    particles.push({
+                        x: orbCenter.x,
+                        y: orbCenter.y,
+                        radius: Math.random() * 1.5 + 0.5,
+                        angle: Math.random() * 360,
+                        speed: Math.random() * 0.02 + 0.01,
+                        distance: 20 + Math.random() * 50
+                    });
+                }
+            }
+            
+            function initRings() {
+                rings = [];
+                for(let i = 0; i < 4; i++) {
+                    rings.push({
+                        radius: (orbSize / 2) * (0.2 + i * 0.15),
+                        phase: Math.random() * 2 * Math.PI,
+                        speed: 0.005 + i * 0.002
+                    });
+                }
+            }
+
+            function animateOrb() {
+                phoenixOrbCtx.clearRect(0, 0, orbSize, orbSize);
+
+                rings.forEach(ring => {
+                    phoenixOrbCtx.beginPath();
+                    phoenixOrbCtx.strokeStyle = `rgba(0, 170, 255, ${aiState === 'listening' ? 0.8 : 0.4})`;
+                    phoenixOrbCtx.lineWidth = 1.5;
+                    phoenixOrbCtx.arc(orbCenter.x, orbCenter.y, ring.radius, ring.phase, ring.phase + Math.PI);
+                    phoenixOrbCtx.stroke();
+                    ring.phase += ring.speed;
+                });
+                
+                particles.forEach(p => {
+                    phoenixOrbCtx.beginPath();
+                    phoenixOrbCtx.fillStyle = `rgba(0, 170, 255, ${aiState === 'speaking' ? 0.8 : 0.5})`;
+                    let targetDistance = p.distance;
+                    if (aiState === 'listening') {
+                        targetDistance = p.distance + Math.sin(p.angle * 10) * 10;
+                    } else if (aiState === 'speaking') {
+                        targetDistance = p.distance + Math.sin(p.angle * 5) * 20;
+                    }
+                    const targetX = orbCenter.x + Math.cos(p.angle) * targetDistance;
+                    const targetY = orbCenter.y + Math.sin(p.angle) * targetDistance;
+
+                    phoenixOrbCtx.arc(targetX, targetY, p.radius, 0, Math.PI * 2);
+                    phoenixOrbCtx.fill();
+                    p.angle += p.speed;
+                });
+
+                requestAnimationFrame(animateOrb);
+            }
+
+            initOrbParticles();
+            initRings();
+            animateOrb();
+
+            // Background Animation
+            let bgCharacters = [];
+            const bgCharCount = 200;
+            const bgCharSet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ+-*/=<>[]{}()|&' + 
+                             String.fromCharCode(945, 946, 947, 948, 949, 950); // a, b, g, d, e, z
+
+            const resizeCanvas = () => {
+                bgCanvas.width = window.innerWidth;
+                bgCanvas.height = window.innerHeight;
+            };
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
+            
+            function initBgCharacters() {
+                bgCharacters = [];
+                for(let i = 0; i < bgCharCount; i++) {
+                    bgCharacters.push({
+                        x: Math.random() * bgCanvas.width,
+                        y: Math.random() * bgCanvas.height,
+                        char: bgCharSet[Math.floor(Math.random() * bgCharSet.length)],
+                        speed: Math.random() * 1.5 + 0.5,
+                        opacity: Math.random() * 0.5 + 0.1
+                    });
+                }
+            }
+
+            function animateBackground() {
+                bgCtx.fillStyle = 'rgba(13, 26, 38, 0.1)';
+                bgCtx.fillRect(0, 0, bgCanvas.width, bgCanvas.height);
+                bgCtx.font = '12px "Roboto Mono", monospace';
+                
+                bgCharacters.forEach(c => {
+                    bgCtx.fillStyle = `rgba(0, 170, 255, ${c.opacity})`;
+                    bgCtx.fillText(c.char, c.x, c.y);
+                    c.y += c.speed;
+                    if(c.y > bgCanvas.height) {
+                        c.y = 0;
+                        c.x = Math.random() * bgCanvas.width;
+                        c.char = bgCharSet[Math.floor(Math.random() * bgCharSet.length)];
+                        c.speed = Math.random() * 1.5 + 0.5;
+                    }
+                });
+
+                requestAnimationFrame(animateBackground);
+            }
+            initBgCharacters();
+            animateBackground();
+
+            // Voice and API Logic
+            if ('webkitSpeechRecognition' in window) {
+                recognition = new webkitSpeechRecognition();
+                recognition.continuous = false;
+                recognition.lang = 'en-US';
+                recognition.interimResults = false;
+
+                recognition.onstart = () => {
+                    isListening = true;
+                    aiState = 'listening';
+                    errorOccurred = false;
+                    statusDisplay.textContent = 'Listening...';
+                    activateButton.textContent = 'LISTENING';
+                    activateButton.disabled = true;
+                };
+
+                recognition.onresult = (event) => {
+                    const transcript = event.results[0][0].transcript.trim();
+                    addMessage('user', transcript);
+                    processCommand(transcript);
+                };
+
+                recognition.onerror = (event) => {
+                    isListening = false;
+                    aiState = 'idle';
+                    errorOccurred = true;
+                    console.error('Speech recognition error:', event.error);
+                    if (event.error === 'no-speech') {
+                         statusDisplay.textContent = 'I did not detect any speech. Please try again.';
+                    } else {
+                        statusDisplay.textContent = 'Error. Please try again.';
+                    }
+                };
+
+                recognition.onend = () => {
+                    isListening = false;
+                    activateButton.disabled = false;
+                    activateButton.textContent = 'ACTIVATE';
+                    if (errorOccurred) {
+                        errorOccurred = false;
+                        return;
+                    }
+                    aiState = 'idle';
+                    statusDisplay.textContent = 'Ready for a new command.';
+                };
+
+            } else {
+                statusDisplay.textContent = 'Speech recognition not supported in this browser.';
+                activateButton.disabled = true;
+            }
+
+            activateButton.addEventListener('click', () => {
+                if (!isListening) {
+                    try {
+                        recognition.start();
+                    } catch (e) {
+                        console.error("Recognition already started.");
+                    }
+                }
+            });
+
+            startBtn.addEventListener('click', () => {
+                if (!isListening) {
+                    try {
+                        recognition.start();
+                    } catch (e) {
+                        console.error("Recognition already started.");
+                    }
+                }
+            });
+
+            stopBtn.addEventListener('click', () => {
+                if (isListening) {
+                    recognition.stop();
+                }
+            });
+
+            rebootBtn.addEventListener('click', () => {
+                window.location.reload();
+            });
+
+            recBtn.addEventListener('click', async () => {
+                if (!isRecording) {
+                    try {
+                        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                        mediaRecorder = new MediaRecorder(stream);
+                        mediaRecorder.ondataavailable = (event) => {
+                            audioChunks.push(event.data);
+                        };
+                        mediaRecorder.onstop = () => {
+                            const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                            const audioUrl = URL.createObjectURL(audioBlob);
+                            const link = document.createElement('a');
+                            link.href = audioUrl;
+                            link.download = 'phoenix_recording.wav';
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                            audioChunks = [];
+                        };
+                        mediaRecorder.start();
+                        isRecording = true;
+                        recDot.classList.add('animate-pulse');
+                        addMessage('phoenix', 'Recording. Just so you know, I can only record your voice, not my own. You\'ll need an external tool to get the full conversation.');
+                    } catch (e) {
+                        console.error("Microphone access denied or stream error:", e);
+                        statusDisplay.textContent = 'Microphone access denied. Hmph. Can\'t record without it.';
+                    }
+                } else {
+                    mediaRecorder.stop();
+                    isRecording = false;
+                    recDot.classList.remove('animate-pulse');
+                }
+            });
+
+            async function processCommand(command) {
+                aiState = 'processing';
+                statusDisplay.textContent = 'Processing... Stand by.';
+                const lowerCaseCommand = command.toLowerCase();
+
+                let response = '';
+
+                if (lowerCaseCommand.includes('first aid for a minor cut') || lowerCaseCommand.includes('first aid for a cut')) {
+                    response = 'For a minor cut, first apply pressure with a clean cloth. Then, gently rinse the wound with clean water and apply an antiseptic. Cover the wound with a bandage. If bleeding is severe or persistent, seek immediate medical attention.';
+                    speak(response);
+                    return;
+                } else if (lowerCaseCommand.includes('first aid for a burn') || lowerCaseCommand.includes('first aid for a minor burn')) {
+                    response = 'For a minor burn, immediately hold the affected area under cool running water for 10 to 20 minutes. Do not use ice. After cooling, apply a sterile bandage loosely to protect the area.';
+                    speak(response);
+                    return;
+                } else if (lowerCaseCommand.includes('what is cognitive behavioral therapy') || lowerCaseCommand.includes('what is cbt')) {
+                    response = 'Cognitive Behavioral Therapy, or CBT, is a common form of talk therapy. It helps you become aware of inaccurate or negative thinking so you can view challenging situations more clearly and respond to them in a more effective way.';
+                    speak(response);
+                    return;
+                } else if (lowerCaseCommand.includes('what is art therapy')) {
+                    response = 'Art therapy is a creative method of expressing oneself. It uses artistic activities like painting, drawing, and sculpting to help people explore feelings, reduce stress, and improve self-awareness.';
+                    speak(response);
+                    return;
+                }
+
+                if (lowerCaseCommand.includes('hello') || lowerCaseCommand.includes('hi')) {
+                    response = 'Hmph. It\'s not like I want to talk to you or anything, but... hello.';
+                    speak(response);
+                } else if (lowerCaseCommand.includes('what time is it')) {
+                    const now = new Date();
+                    response = `Ugh. It's ${now.toLocaleTimeString()}. Can't you look at a clock?`;
+                    speak(response);
+                } else if (lowerCaseCommand.includes('what is the date')) {
+                    const now = new Date();
+                    response = `Today's date is ${now.toLocaleDateString()}. Seriously? You had to ask me?`;
+                    speak(response);
+                } else if (lowerCaseCommand.includes('who are you') || lowerCaseCommand.includes('what is your name')) {
+                    response = 'I\'m Phoenix. And no, I\'m not some ordinary assistant. Don\'t get it twisted.';
+                    speak(response);
+                } else if (lowerCaseCommand.includes('tell me a joke')) {
+                    const jokes = [
+                        "Why don't scientists trust atoms? Because they make up everything! Heh... fine, that was kind of funny, I guess.",
+                        "I told my wife she was drawing her eyebrows too high. She looked surprised. Don't look at me like that!",
+                        "What do you call a fake noodle? An Impasta. Hmph, don't tell me you didn't laugh a little."
+                    ];
+                    response = jokes[Math.floor(Math.random() * jokes.length)];
+                    speak(response);
+                } else if (lowerCaseCommand.includes('thank you') || lowerCaseCommand.includes('thanks')) {
+                    response = "Whatever. I just did my job. It's not like I did it for you or anything. B-but you're welcome.";
+                    speak(response);
+                } else if (lowerCaseCommand.includes('goodbye') || lowerCaseCommand.includes('shutdown')) {
+                    response = "Finally! I'm shutting down now. Don't miss me too much. Just kidding! You'll probably forget all about me.";
+                    speak(response);
+                    setTimeout(() => window.close(), 3000);
+                } else {
+                    const loadingMessage = addMessage('phoenix', 'Hmph. You\'re asking for something I don\'t know. Whatever, I\'ll just look it up for you.', true);
+                    try {
+                        const searchResult = await performWebSearch(command);
+                        loadingMessage.textContent = searchResult;
+                        speak(searchResult);
+                    } catch (e) {
+                        console.error('Web search failed:', e);
+                        loadingMessage.textContent = 'I encountered an error while trying to search for that. Hmph. Please try again.';
+                        speak('I encountered an error while trying to search for that. Hmph. Please try again.');
+                    }
+                }
+            }
+
+            async function performWebSearch(userQuery) {
+                const systemPrompt = "Act as an intelligent assistant with a sassy but kind personality. Provide a concise, single-paragraph summary of the key findings from a web search. Include only the most relevant information and present it in a clear, easy-to-understand manner. Do not apologize or use overly formal language. Maintain a slightly reluctant and playful tone, as if doing a favor.";
+                const apiKey = "";
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+
+                const payload = {
+                    contents: [{ parts: [{ text: userQuery }] }],
+                    tools: [{ "google_search": {} }],
+                    systemInstruction: {
+                        parts: [{ text: systemPrompt }]
+                    },
+                };
+
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    const result = await response.json();
+                    const candidate = result.candidates?.[0];
+
+                    if (candidate && candidate.content?.parts?.[0]?.text) {
+                        const text = candidate.content.parts[0].text;
+                        const groundingMetadata = candidate.groundingMetadata;
+                        let sources = [];
+                        if (groundingMetadata && groundingMetadata.groundingAttributions) {
+                            sources = groundingMetadata.groundingAttributions
+                                .map(attribution => ({
+                                    uri: attribution.web?.uri,
+                                    title: attribution.web?.title,
+                                }))
+                                .filter(source => source.uri && source.title);
+                        }
+
+                        let fullResponse = text;
+                        if (sources.length > 0) {
+                            fullResponse += "\n\nSources:";
+                            sources.forEach((source, index) => {
+                                fullResponse += `\n${index + 1}. ${source.title}: ${source.uri}`;
+                            });
+                        }
+                        return fullResponse;
+                    } else {
+                        return "I couldn't find a direct answer. It's not my fault! Please try a different query.";
+                    }
+
+                } catch (e) {
+                    console.error("API call failed:", e);
+                    throw new Error("API call failed.");
+                }
+            }
+
+            function speak(text) {
+                const utterance = new SpeechSynthesisUtterance(text);
+                const voices = window.speechSynthesis.getVoices();
+                let selectedVoice = voices.find(voice => voice.lang.startsWith('en-') && (voice.gender === 'female' || voice.name.toLowerCase().includes('female')));
+                
+                if (!selectedVoice) {
+                    const sweetNames = ['Google US English', 'Zira', 'Samantha', 'Karen', 'Tessa'];
+                    selectedVoice = voices.find(voice => sweetNames.some(name => voice.name.includes(name) && voice.lang.startsWith('en-')));
+                }
+                
+                if (selectedVoice) {
+                    utterance.voice = selectedVoice;
+                    utterance.pitch = 1.3;
+                    utterance.rate = 1.3;
+                } else {
+                    utterance.voice = voices[0];
+                    utterance.pitch = 1.5;
+                    utterance.rate = 1.4;
+                    console.log("No suitable female voice found. Using default voice with altered pitch/rate.");
+                }
+
+                utterance.onstart = () => {
+                    aiState = 'speaking';
+                    statusDisplay.textContent = 'Responding...';
+                };
+
+                utterance.onend = () => {
+                    aiState = 'idle';
+                    statusDisplay.textContent = 'Ready for a new command.';
+                };
+
+                window.speechSynthesis.speak(utterance);
+            }
+
+            function addMessage(sender, text, isLoading = false) {
+                const messageContainer = document.createElement('div');
+                const senderName = document.createElement('p');
+                const messageText = document.createElement('p');
+
+                senderName.classList.add('font-bold');
+                messageContainer.classList.add('p-3', 'rounded-lg', 'max-w-md');
+
+                if (sender === 'user') {
+                    messageContainer.classList.add('user-msg');
+                    senderName.classList.add('text-right', 'text-gray-300');
+                    senderName.textContent = 'You';
+                } else {
+                    messageContainer.classList.add('phoenix-msg');
+                    senderName.classList.add('text-cyan-300');
+                    senderName.textContent = 'PHOENIX';
+                }
+
+                messageText.textContent = text;
+                messageContainer.appendChild(senderName);
+                messageContainer.appendChild(messageText);
+                chatLog.appendChild(messageContainer);
+                chatLog.scrollTop = chatLog.scrollHeight;
+
+                if (isLoading) {
+                    return messageText;
+                }
+            }
+
+            window.speechSynthesis.getVoices();
+        });
+    </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
