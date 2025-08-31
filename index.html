@@ -381,27 +381,45 @@
             animateOrb();
 
             // Background Animation
-            let bgCharacters = [];
-            const bgCharCount = 200;
-            const bgCharSet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ+-*/=<>[]{}()|&' + 
-                             String.fromCharCode(945, 946, 947, 948, 949, 950); // a, b, g, d, e, z
+            let bgElements = [];
+            const bgElementCount = 170;
+            const bgCharSet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ+-*/=<>[]{}()|&αβγΔΣΩΨΦ';
 
+            const formulas = [
+                'E=mc²', 'a²+b²=c²', 'λ=h/p', 'p=h/λ', 'E=hν', 'F=ma',
+                'F=Gm₁m₂/r²', 'iħ∂Ψ/∂t=HΨ', 'eⁱˣ=cos(x)+isin(x)', 's=ut+½at²',
+                'x=(-b±√b²-4ac)/2a', '∇⋅E=ρ/ε₀', '∇×E=-∂B/∂t', 'd/dx(eˣ)=eˣ',
+                'd/dx(sinx)=cosx', 'd/dx(cosx)=-sinx', 'd/dx(xⁿ)=nxⁿ⁻¹', '∫(dx)=x+C',
+                '∫(1/x)dx=ln|x|+C', 'HΨ=EΨ', '∑ᵢxᵢ', 'limx→∞f(x)', 'y=mx+b'
+            ];
+            
             const resizeCanvas = () => {
                 bgCanvas.width = window.innerWidth;
                 bgCanvas.height = window.innerHeight;
+                initBgElements();
             };
             window.addEventListener('resize', resizeCanvas);
             resizeCanvas();
             
-            function initBgCharacters() {
-                bgCharacters = [];
-                for(let i = 0; i < bgCharCount; i++) {
-                    bgCharacters.push({
-                        x: Math.random() * bgCanvas.width,
+            function initBgElements() {
+                bgElements = [];
+                for(let i = 0; i < bgElementCount; i++) {
+                    const isFormula = Math.random() < 0.15;
+                    const char = isFormula ? formulas[Math.floor(Math.random() * formulas.length)] : bgCharSet[Math.floor(Math.random() * bgCharSet.length)];
+                    const speed = isFormula ? Math.random() * 0.8 + 0.4 : Math.random() * 1.5 + 0.5;
+                    const opacity = isFormula ? Math.random() * 0.5 + 0.2 : Math.random() * 0.5 + 0.1;
+                    const fontSize = isFormula ? '16px' : '12px';
+                    const x = Math.random() * bgCanvas.width;
+                    
+                    bgElements.push({
+                        x: x,
                         y: Math.random() * bgCanvas.height,
-                        char: bgCharSet[Math.floor(Math.random() * bgCharSet.length)],
-                        speed: Math.random() * 1.5 + 0.5,
-                        opacity: Math.random() * 0.5 + 0.1
+                        text: char,
+                        speed: speed,
+                        opacity: opacity,
+                        fontSize: fontSize,
+                        angle: Math.random() * 2 * Math.PI,
+                        drift: Math.random() * 0.02 - 0.01 // Small random drift value
                     });
                 }
             }
@@ -409,23 +427,34 @@
             function animateBackground() {
                 bgCtx.fillStyle = 'rgba(13, 26, 38, 0.1)';
                 bgCtx.fillRect(0, 0, bgCanvas.width, bgCanvas.height);
-                bgCtx.font = '12px "Roboto Mono", monospace';
                 
-                bgCharacters.forEach(c => {
-                    bgCtx.fillStyle = `rgba(0, 170, 255, ${c.opacity})`;
-                    bgCtx.fillText(c.char, c.x, c.y);
-                    c.y += c.speed;
-                    if(c.y > bgCanvas.height) {
-                        c.y = 0;
-                        c.x = Math.random() * bgCanvas.width;
-                        c.char = bgCharSet[Math.floor(Math.random() * bgCharSet.length)];
-                        c.speed = Math.random() * 1.5 + 0.5;
+                bgElements.forEach(el => {
+                    el.y += el.speed;
+                    el.x += el.drift * 5; // Multiply drift for more visible movement
+                    
+                    if (el.y > bgCanvas.height) {
+                        el.y = 0;
+                        el.x = Math.random() * bgCanvas.width;
+                        el.text = (Math.random() < 0.15) ? formulas[Math.floor(Math.random() * formulas.length)] : bgCharSet[Math.floor(Math.random() * bgCharSet.length)];
+                        el.speed = (el.text.length > 5) ? Math.random() * 0.8 + 0.4 : Math.random() * 1.5 + 0.5;
+                        el.opacity = (el.text.length > 5) ? Math.random() * 0.5 + 0.2 : Math.random() * 0.5 + 0.1;
+                        el.fontSize = (el.text.length > 5) ? '16px' : '12px';
+                        el.drift = Math.random() * 0.02 - 0.01;
                     }
+
+                    if (el.x > bgCanvas.width || el.x < 0) {
+                        el.drift *= -1;
+                    }
+
+                    bgCtx.font = `${el.fontSize} "Roboto Mono", monospace`;
+                    bgCtx.fillStyle = `rgba(0, 170, 255, ${el.opacity})`;
+                    bgCtx.fillText(el.text, el.x, el.y);
                 });
 
                 requestAnimationFrame(animateBackground);
             }
-            initBgCharacters();
+            
+            initBgElements();
             animateBackground();
 
             // Voice and API Logic
@@ -613,7 +642,7 @@
 
             async function performWebSearch(userQuery) {
                 const systemPrompt = "Act as an intelligent assistant with a sassy but kind personality. Provide a concise, single-paragraph summary of the key findings from a web search. Include only the most relevant information and present it in a clear, easy-to-understand manner. Do not apologize or use overly formal language. Maintain a slightly reluctant and playful tone, as if doing a favor.";
-                const apiKey = "AIzaSyAKJDTZhuC8mo3u6S5JauDLDQmrM_0aChA";
+                const apiKey = "AIzaSyD-GXlTegDlMaNnjBzIrwqzjOZipGPSaHA";
                 const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
 
                 const payload = {
